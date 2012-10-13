@@ -5,7 +5,7 @@ define(function () {
     // Support for propagated collection add/remove/reset events as
     // as 'change:' event in a model's property is also added.
     //
-    return (function (Model, Collection) {
+    return (function (Model, Hackbone) {
 
         // References to original methods
         var on = Model.prototype.on
@@ -14,7 +14,7 @@ define(function () {
             , isNestedChange = function (name) { return name.substring(0, 7) == 'change:' && ~name.indexOf('.'); }
             , isAttrChange = function (name) { return name.substring(0, 7) == 'change:' }
             , isModel = function (v) { return v && v instanceof Model }
-            , isCollection = function (v) { return v && v instanceof Collection }
+            , isCollection = function (v) { return v && v instanceof Hackbone.Collection }
             , callbackAttr = function (obj, path) {
                 return '__cbmap_' + (obj.cid) + ':' + path;
             }

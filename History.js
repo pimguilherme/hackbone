@@ -1,10 +1,8 @@
-define(
-    [
-        'jquery',
-        'underscore',
-        'lib/Backbone/Events'
-    ],
-    function ($, _, Events) {
+define(function (require) {
+
+        var $ = require('jquery')
+            , _ = require('underscore')
+            , Events = require('./Events')
 
         // Handles cross-browser history management, based on URL fragments. If the
         // browser does not support `onhashchange`, falls back to polling.

@@ -1,13 +1,13 @@
-define(['Model', 'Collection'], function (Model, Collection) {
+define(function (require) {
 
     var log = function () {
-        console.log.call(console, '[ViewBinder] ' + m, Array.prototype.slice.call(arguments, 1));
+        console.log.call(console, '[Registry] ' + m, Array.prototype.slice.call(arguments, 1));
     }
 
     // Model Registry
     // Here we store all models reference so they don't have to be duplicated,
     // based on the idAttribute
-    var Registry = {
+    return {
         _instances:{},
 
         // Adds a new model to the registry
@@ -61,7 +61,4 @@ define(['Model', 'Collection'], function (Model, Collection) {
             return this._instances[modelName] && this._instances[modelName][id];
         }
     }
-
-    return window.ModelRegistry = Registry;
-
 });

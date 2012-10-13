@@ -1,22 +1,12 @@
-define([
-    'jquery',
-    'Model',
-    'Collection',
-    'lib/Backbone/ModelRegistry',
-    'lib/utils',
-    'api-config'
-], function (
-    $, _Model, _Collection, Registry, utils, config
-    ) {
+define(function (require) {
 
-    var Collection = function () {
-            return _Collection || (_Collection = require('Collection'))
-        }
-        , Model = function () {
-            return _Model || (_Model = require('Model'))
-        }
-        , isCollection = function (obj) { return obj instanceof Collection() }
-        , isModel = function (obj) { return obj instanceof Model() }
+    var $ = require('jquery')
+        , config = require('config').api
+        , Utils = require('./Utils')
+        , Hackbone = require('./Hackbone')
+
+    var isCollection = function (obj) { return obj instanceof Hackbone.Collection }
+        , isModel = function (obj) { return obj instanceof Hackbone.Model }
         , slice = function (obj, index) {
             return Array.prototype.slice.call(obj, index)
         }
@@ -33,12 +23,12 @@ define([
 
                 // Collection
                 if (attrType instanceof Array) {
-                    var modelConfig = config.models[Collection().getModel(attrType[0])];
+                    var modelConfig = config.models[Hackbone.Collection.getModel(attrType[0])];
                     if (!modelConfig) error('Invalid model for collection', attrType[0]);
                     if (!(val instanceof Array)) {
-                        attrs[name] = Collection().create(attrType[0]);
+                        attrs[name] = Hackbone.Collection.create(attrType[0]);
                     } else {
-                        attrs[name] = Collection().create(attrType[0], val.map(function (obj) {
+                        attrs[name] = Hackbone.Collection.create(attrType[0], val.map(function (obj) {
                             return parseAttributes(obj, modelConfig.schema)
                         }));
                     }
@@ -49,12 +39,12 @@ define([
                     // ObjectId
                     if (typeof val == 'string') {
                         // Fetch from registry
-                        attrs[name] = Registry.fetch(attrType, val) || Model().create(attrType, {_id:val});
+                        attrs[name] = Hackbone.ModelRegistry.fetch(attrType, val) || Hackbone.Model.create(attrType, {_id:val});
                     }
                     // Object
                     else if (typeof val == 'object') {
                         // Expand it to be a new model then
-                        attrs[name] = Model().create(attrType, parseAttributes(val, config.models[attrType].schema));
+                        attrs[name] = Hackbone.Model.create(attrType, parseAttributes(val, config.models[attrType].schema));
                     }
                     // Apparently invalid value, let's remove it
                     else {
@@ -68,25 +58,19 @@ define([
             }
             return attrs;
         }
-    // Parses the given set of models into the Registry
+    // Parses the given set of models into the Hackbone.ModelRegistry
         , parseModels = function (models) {
             for (var name in models) {
                 models[name] = models[name].map(function (attrs) {
-                    return Model().create(name, parseAttributes(attrs, config.models[name].schema))
+                    return Hackbone.Model.create(name, parseAttributes(attrs, config.models[name].schema))
                 })
             }
         }
         , modelToJSON = function (model) {
-            var attrs = {};
-            for (var name in model.attributes) {
-                if (name[0] == '-') continue;
-                attrs[name] = model.attributes[name] instanceof Model() ?
-                    (model.attributes[name].id || undefined) : model.attributes[name];
-            }
-            return attrs;
+            return model.toJSON()
         }
-        , error = utils.scopedError('APITransport')
-        , log = utils.scopedLog('APITransport')
+        , error = Utils.scopedError('APITransport')
+        , log = Utils.scopedLog('APITransport')
 // Map from CRUD to HTTP for our default `Backbone.sync` implementation.
         , methodMap = {
             'create':'POST',
@@ -119,7 +103,7 @@ define([
             var name = result[0]
                 , models = []
             for (var i = 1; i < result.length; i++) {
-                models.push(Registry.fetch(name, result[i]))
+                models.push(Hackbone.ModelRegistry.fetch(name, result[i]))
             }
             return models;
         }
@@ -221,7 +205,7 @@ define([
                     var res;
                     try {
                         res = $.parseJSON(xhr.responseText);
-                    } catch(e){
+                    } catch (e) {
                     }
                     // Unexpected error!
                     if (xhr.status == 200 || !res || !res.errors) {

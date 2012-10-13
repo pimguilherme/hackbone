@@ -1,8 +1,26 @@
-define([ 'underscore', 'config'],
-    function (_, config) {
+define(function (require) {
+
+        var config = require('config')
+            , _ = require('underscore')
+
         // Shared empty constructor function to aid in prototype-chain creation.
         var ctor = function () {}
         var Utils = {
+
+            // Common scoped error logging
+            scopedError:function (name) {
+                return function (e) {
+                    console.error.call(console, 'Hackbone' + (name ? '/' + name : '') + ": " + e, Array.prototype.slice.call(arguments, 1));
+                    throw name + ": " + e
+                }
+            },
+
+            // Commong scoped logging
+            scopedLog:function (name) {
+                return function (m) {
+                    console.log.call(console, "[Hackbone" + (name ? '/' + name : '') + "] " + m, Array.prototype.slice.call(arguments, 1));
+                }
+            },
 
             namedExtend:function (name) {
                 return function (protoProps, classProps) {
@@ -22,8 +40,9 @@ define([ 'underscore', 'config'],
                     var self = this
                         , f = protoProps.hasOwnProperty('constructor') ? protoProps.constructor : self
                         , evalStr = ''
-                    evalStr += 'var ' + name + ' = function(){ f.apply(this, arguments); };';
-                    evalStr += 'protoProps.constructor = ' + name + ';'
+                    var escapedName = name.replace(/[-\/\(\)]+/g, '_');
+                    evalStr += 'var ' + escapedName + ' = function(){ f.apply(this, arguments); };';
+                    evalStr += 'protoProps.constructor = ' + escapedName + ';'
                     eval(evalStr);
                 }
                 var child = Utils.inherits(this, protoProps, classProps);

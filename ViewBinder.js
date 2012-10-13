@@ -8,15 +8,17 @@
  *  Model functions will no longer be accessed via the ~ argument token.
  *
  */
-define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
-    function (View, Model, Collection, Utils) {
+define(function (require) {
+
+        var Hackbone = require('./Hackbone')
+            , Utils = require('./Utils')
 
         // Helper methods
         var getModelPathIdentifier = function (model, path) { return model.cid + '@' + path; }
-            , isModel = function (v) { return v && v instanceof Model }
+            , isModel = function (v) { return v && v instanceof Hackbone.Model }
             , isCollection = function (v) { return v && v instanceof Collection }
             , error = function (e) {
-                console.log.call(console, 'ViewBinderError: ' + e, Array.prototype.slice.call(arguments, 1));
+                console.error.call(console, 'ViewBinderError: ' + e, Array.prototype.slice.call(arguments, 1));
                 throw 'ViewBinderError: ' + e
             }
             , log = function (m) {
@@ -41,7 +43,7 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
         //
         // Note: it is very important for this prototype to be well mapped, so
         // we can detect and react properly to change events.
-            , modelPrototype = Model.prototype
+//            , modelPrototype = Hackbone.Model.prototype
             ;
 
         //
@@ -62,6 +64,9 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
             parseElements:function () {
                 // Elements which will be bound to data
                 this.$els = this.view.$el.find('[data-bind]');
+                if (!this.view.el && this.view.$el.is('[data-bind]')) {
+                    this.$els = this.$els.add(this.view.$el)
+                }
             },
 
             // Manually adds an element to the stack, and applies its bindings
@@ -371,19 +376,19 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
             // based on .get calls from the models
             // Since this might be expensive, it shouldn't be called at will
             build:function () {
-                var get = modelPrototype.get
+                var get = Hackbone.Model.prototype.get
                     , self = this
                     ;
                 this.clear();
                 // We create a thin wrapper around .get to listen
                 // to dependencies
-                modelPrototype.get = function (path) {
+                Hackbone.Model.prototype.get = function (path) {
                     self.bindToChanges(this, path);
                     return get.apply(this, arguments)
                 }
                 this.callback();
                 // And then restore the original method
-                modelPrototype.get = get;
+                Hackbone.Model.prototype.get = get;
             },
 
             // Clears all the binds to model changes made so far
@@ -471,7 +476,7 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
             fn:function (name) {
                 var callback = this.view[name];
                 if (typeof callback != 'function') error('Invalid function call', name);
-                callback.apply(this, arguments);
+                callback.apply(this.view, arguments);
             },
 
             // Changes the text, escaping it (jQuery delegation)
@@ -558,6 +563,49 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
                 log.apply(log, arguments);
             },
 
+            // Binds the model to a given input
+            input:{
+                // Starts listening to Router events
+                setup:function (name, model) {
+                    this.model = model || this.view.model
+                    this.name = name;
+
+                    var self = this
+                    this.model.on('change:' + name, this.syncFromModel.bind(this))
+                    this.$el.change(this.syncToModel.bind(this))
+
+                    if (this.$el.val()) {
+                        this.syncToModel()
+                    } else {
+                        this.syncFromModel()
+                    }
+                },
+
+                syncFromModel:function () {
+                    this.$el.val(this.model.get(this.name))
+                },
+
+                syncToModel:function () {
+                    var names = this.name.split('.')
+                        , rest = []
+                        , name
+                        , value = this.model
+                        , model = this.model
+                        ;
+                    while (value && (name = names.shift()) && rest.push(name)) {
+                        value = value instanceof Model ? value.attributes[name] : value[name];
+                        if (value instanceof Model){
+                            model = value
+                            rest = []
+                        }
+                    }
+                    if (!rest.length){
+                        error("You shouldn't be overriding a model with some plain value")
+                    }
+                    model.set(rest.join('.'), this.$el.val())
+                }
+            },
+
             // Adds a 'current' class on current links, according to the Router
             'route-links':{
                 update:function () {
@@ -580,10 +628,15 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
 
             // Renders a collection in the element
             collection:{
-                setup:function (collection, viewName) {
-                    var self = this;
+                setup:function (collection, viewName, options) {
+
+                    this.options = options || {}
+                    this.renderedCount = 0
                     this.renderModel = this.renderModel.bind(this);
+
+                    var self = this;
                     if (!collection) error('Invalid collection', collection, viewName, this);
+
                     require(['views/' + viewName], function (modelView) {
                         if (self.view.removed) return;
                         self.modelView = modelView;
@@ -602,13 +655,22 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
 
                 // Renders a single collection model
                 renderModel:function (model) {
+                    if (this.options.limit && this.renderedCount >= this.options.limit) {
+                        return
+                    }
+
                     var self = this;
-                    var view = new this.modelView({model:model, appendTo:this.$el});
-                    view.$el.data('cid', model.cid)
+                    var view = new this.modelView({
+                        model:model,
+                        appendTo:!this.options.prepend ? this.$el : null,
+                        prependTo:this.options.prepend ? this.$el : null
+                    });
                     view.built(function () {
+                        view.$el.data('cid', model.cid)
                         self.view.trigger('@collection/renderModel', model, view)
                     });
                     this.modelViews[model.cid] = view;
+                    this.renderedCount++
                 },
 
                 // Removes a previously rendered model view
@@ -617,6 +679,7 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
                     if (!view) return;
                     view.remove();
                     delete this.modelViews[model.cid];
+                    this.renderedCount--
                 },
 
                 clearViews:function () {
@@ -624,6 +687,7 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
                         this.modelViews[cid].remove();
                         delete this.modelViews[cid];
                     }
+                    this.renderedCount = 0
                 },
 
                 // We must be sure that all views are removed properly!
@@ -642,8 +706,8 @@ define(['View', 'Model', 'Collection', 'lib/Backbone/Utils'],
                         if (self.view.removed) return;
                         self.boundView = new boundView({
                             el:self.$el,
-                            model:(a instanceof Model && a) || (b instanceof Model && b),
-                            collection:(a instanceof Collection && a) || (b instanceof Collection && b)
+                            model:(a instanceof Hackbone.Model && a) || (b instanceof Hackbone.Model && b),
+                            collection:(a instanceof Hackbone.Collection && a) || (b instanceof Hackbone.Collection && b)
                         });
                     })
                 },
